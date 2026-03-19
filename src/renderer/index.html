@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Recovery Service — The Claw Persists</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d0d;
+      --bg2:       #141414;
+      --bg3:       #1a1a1a;
+      --border:    #2a2a2a;
+      --border2:   #333;
+      --accent:    #FF6B4A;
+      --accent2:   #cc4f33;
+      --text:      #e0e0e0;
+      --text2:     #888;
+      --text3:     #555;
+      --mono:      'JetBrains Mono', 'Fira Mono', 'Courier New', monospace;
+      --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --green:     #4aff8c;
+      --red:       #ff4a4a;
+      --yellow:    #ffd24a;
+      --radius:    6px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; overflow: hidden; }
+
+    /* ── Layout ── */
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* titlebar drag area for macOS */
+    #titlebar { -webkit-app-region: drag; height: 28px; background: var(--bg); display: flex; align-items: center; padding: 0 16px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+    #titlebar span { -webkit-app-region: no-drag; font-size: 11px; color: var(--text3); margin-left: auto; font-family: var(--mono); }
+
+    #body { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    #sidebar { width: 180px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 0; flex-shrink: 0; }
+    #logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    #logo .icon { font-size: 28px; }
+    #logo .name { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
+    #logo .sub  { font-size: 10px; color: var(--text3); }
+
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; color: var(--text2); font-size: 13px; transition: background 0.15s, color 0.15s; border-left: 2px solid transparent; }
+    .nav-item:hover { background: var(--bg3); color: var(--text); }
+    .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(255,107,74,0.06); }
+    .nav-item .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    /* ── Main content ── */
+    #main { flex: 1; overflow-y: auto; padding: 28px; }
+    #main::-webkit-scrollbar { width: 6px; }
+    #main::-webkit-scrollbar-track { background: transparent; }
+    #main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+    h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+    .subtitle { color: var(--text2); font-size: 13px; margin-bottom: 24px; }
+
+    /* ── Cards ── */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
+    .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 10px; font-weight: 600; }
+    .card-value { font-size: 22px; font-weight: 700; color: var(--text); }
+    .card-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+
+    /* ── Mono address display ── */
+    .addr-row { display: flex; align-items: center; gap: 8px; }
+    .addr { font-family: var(--mono); font-size: 11px; color: var(--text2); word-break: break-all; flex: 1; }
+    .addr.full { font-size: 12px; color: var(--text); }
+
+    /* ── Buttons ── */
+    button { font-family: var(--sans); cursor: pointer; border: none; border-radius: var(--radius); font-size: 13px; transition: background 0.15s, opacity 0.15s; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn { padding: 8px 16px; background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-primary { background: var(--accent); color: #fff; border: none; padding: 9px 20px; font-weight: 600; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent2); }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+    .btn-icon { background: transparent; color: var(--text3); border: none; padding: 3px 6px; font-size: 13px; }
+    .btn-icon:hover { color: var(--accent); }
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 8px 16px; }
+    .btn-danger:hover:not(:disabled) { background: rgba(255,74,74,0.1); }
+
+    /* ── Form elements ── */
+    input, textarea, select { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius); color: var(--text); font-family: var(--sans); font-size: 13px; padding: 8px 12px; width: 100%; outline: none; transition: border-color 0.15s; }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 100px; font-family: var(--mono); font-size: 12px; }
+    select option { background: var(--bg3); }
+    label { font-size: 12px; color: var(--text2); margin-bottom: 5px; display: block; }
+    .field { margin-bottom: 14px; }
+    .field-row { display: flex; gap: 10px; align-items: flex-end; }
+    .field-row .field { flex: 1; margin-bottom: 0; }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .toggle { position: relative; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border2); border-radius: 10px; cursor: pointer; transition: background 0.2s; }
+    .toggle-slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s; }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+    /* ── Progress bar ── */
+    .progress-wrap { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; margin: 8px 0; }
+    .progress-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; width: 0%; }
+
+    /* ── Status badges ── */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-green { background: rgba(74,255,140,0.12); color: var(--green); }
+    .badge-red   { background: rgba(255,74,74,0.12); color: var(--red); }
+    .badge-yellow{ background: rgba(255,210,74,0.12); color: var(--yellow); }
+    .badge-gray  { background: rgba(255,255,255,0.06); color: var(--text2); }
+    .badge-accent{ background: rgba(255,107,74,0.15); color: var(--accent); }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 8px 12px; color: var(--text3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); font-weight: 600; }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ── Entry type colors ── */
+    .type-EVENT      { color: #4a9eff; }
+    .type-LESSON     { color: #b44aff; }
+    .type-DECISION   { color: var(--yellow); }
+    .type-CORRECTION { color: var(--red); }
+    .type-CONTEXT    { color: #4affdd; }
+    .type-STATE      { color: var(--green); }
+    .type-REFLECTION { color: #ff9f4a; }
+    .type-THREAD     { color: #ff4ab0; }
+    .type-FILE       { color: var(--accent); }
+    .type-OTHER      { color: var(--text3); }
+    .type-ENCRYPTED  { color: var(--text3); }
+    .type-ENV_BACKUP { color: var(--yellow); }
+
+    /* ── Status bar ── */
+    #statusbar { height: 26px; background: var(--bg2); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 20px; font-size: 11px; color: var(--text3); flex-shrink: 0; }
+    #statusbar .sep { color: var(--border2); }
+    #conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); display: inline-block; margin-right: 5px; }
+    #conn-dot.online { background: var(--green); }
+    #conn-dot.error  { background: var(--red); }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Info box ── */
+    .info-box { background: rgba(255,107,74,0.06); border: 1px solid rgba(255,107,74,0.25); border-radius: var(--radius); padding: 12px 16px; font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+    .warn-box { background: rgba(255,210,74,0.06); border: 1px solid rgba(255,210,74,0.25); border-radius: var(--radius); padding: 12px 16px; font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+
+    /* ── Sig link ── */
+    .sig-link { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer; text-decoration: none; }
+    .sig-link:hover { text-decoration: underline; }
+
+    /* ── Count grid ── */
+    .count-cell { text-align: center; }
+    .count-num  { font-size: 24px; font-weight: 700; }
+    .count-label{ font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    /* ── Section header ── */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+
+    /* ── Empty state ── */
+    .empty { text-align: center; color: var(--text3); padding: 40px 0; font-size: 13px; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--bg3); border-radius: var(--radius); padding: 3px; width: fit-content; }
+    .tab { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--text2); transition: all 0.15s; border: none; background: transparent; }
+    .tab.active { background: var(--bg2); color: var(--text); border: 1px solid var(--border2); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Scrollable list ── */
+    .entry-list { max-height: 340px; overflow-y: auto; }
+    .entry-list::-webkit-scrollbar { width: 4px; }
+    .entry-list::-webkit-scrollbar-thumb { background: var(--border2); }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 36px; right: 20px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 100; max-width: 320px; }
+    #toast.show { opacity: 1; }
+    #toast.success { border-color: var(--green); color: var(--green); }
+    #toast.error   { border-color: var(--red); color: var(--red); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Titlebar -->
+  <div id="titlebar">
+    <span>🦀 Agent Recovery Service — The Claw Persists</span>
+  </div>
+
+  <div id="body">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div id="logo">
+        <div class="icon">🦀</div>
+        <div class="name">ARS</div>
+        <div class="sub">v1.0.0</div>
+      </div>
+      <div class="nav-item active" data-screen="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-screen="publish">
+        <span class="nav-icon">📤</span> Publish
+      </div>
+      <div class="nav-item" data-screen="recover">
+        <span class="nav-icon">🔄</span> Recover
+      </div>
+      <div class="nav-item" data-screen="setup">
+        <span class="nav-icon">⚙️</span> Setup
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main id="main">
+
+      <!-- ══════════════════ DASHBOARD ══════════════════ -->
+      <div id="screen-dashboard" class="screen active">
+        <div class="section-header">
+          <div>
+            <h1>Dashboard</h1>
+            <div class="subtitle">Chain state for your agent identity</div>
+          </div>
+          <button class="btn" id="btn-refresh">↻ Refresh</button>
+        </div>
+
+        <!-- Wallet -->
+        <div class="card">
+          <div class="card-title">Wallet</div>
+          <div class="addr-row">
+            <span class="addr full" id="dash-address">—</span>
+            <button class="btn-icon" onclick="copyText('dash-address')" title="Copy">⎘</button>
+            <button class="btn btn-sm" id="btn-solscan">Solscan ↗</button>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">SOL Balance</div>
+            <div class="card-value" id="dash-balance">—</div>
+            <div class="card-sub" id="dash-txs-remaining">— estimated transactions remaining</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Total On-Chain Entries</div>
+            <div class="card-value" id="dash-total">—</div>
+            <div class="card-sub" id="dash-last-pulse">Last write: —</div>
+          </div>
+        </div>
+
+        <!-- Entry type counts -->
+        <div class="card">
+          <div class="card-title">Entries by Type</div>
+          <div class="grid-4" id="dash-counts" style="margin-bottom:0">
+            <div class="count-cell"><div class="count-num type-EVENT" id="cnt-EVENT">—</div><div class="count-label">Event</div></div>
+            <div class="count-cell"><div class="count-num type-LESSON" id="cnt-LESSON">—</div><div class="count-label">Lesson</div></div>
+            <div class="count-cell"><div class="count-num type-DECISION" id="cnt-DECISION">—</div><div class="count-label">Decision</div></div>
+            <div class="count-cell"><div class="count-num type-CORRECTION" id="cnt-CORRECTION">—</div><div class="count-label">Correction</div></div>
+            <div class="count-cell"><div class="count-num type-CONTEXT" id="cnt-CONTEXT">—</div><div class="count-label">Context</div></div>
+            <div class="count-cell"><div class="count-num type-STATE" id="cnt-STATE">—</div><div class="count-label">State</div></div>
+            <div class="count-cell"><div class="count-num type-REFLECTION" id="cnt-REFLECTION">—</div><div class="count-label">Reflection</div></div>
+            <div class="count-cell"><div class="count-num type-THREAD" id="cnt-THREAD">—</div><div class="count-label">Thread</div></div>
+          </div>
+        </div>
+
+        <!-- Published files -->
+        <div class="card">
+          <div class="card-title">Published Files</div>
+          <div id="dash-files">
+            <div class="empty">No scan data. Click Refresh to scan the chain.</div>
+          </div>
+        </div>
+
+        <!-- Scan progress -->
+        <div id="dash-scan-progress" style="display:none">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px;" id="dash-scan-label">Scanning chain...</div>
+          <div class="progress-wrap"><div class="progress-bar" id="dash-progress-bar"></div></div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ PUBLISH ══════════════════ -->
+      <div id="screen-publish" class="screen">
+        <h1>Publish</h1>
+        <div class="subtitle">Write identity, memory, and files to the Solana blockchain</div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="tab-entry">Ledger Entry</button>
+          <button class="tab" data-tab="tab-file">Publish File</button>
+          <button class="tab" data-tab="tab-env">Backup .env</button>
+        </div>
+
+        <!-- Ledger Entry -->
+        <div id="tab-entry" class="tab-content active">
+          <div class="card">
+            <h2>New Ledger Entry</h2>
+            <div class="field">
+              <label>Entry Type</label>
+              <select id="entry-type">
+                <option value="EVENT">EVENT</option>
+                <option value="LESSON">LESSON</option>
+                <option value="DECISION">DECISION</option>
+                <option value="CORRECTION">CORRECTION</option>
+                <option value="CONTEXT">CONTEXT</option>
+                <option value="STATE">STATE</option>
+                <option value="REFLECTION">REFLECTION</option>
+                <option value="THREAD">THREAD</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Content</label>
+              <textarea id="entry-content" placeholder="Write your entry..." rows="6"></textarea>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input type="checkbox" id="entry-encrypted" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <span id="entry-enc-label" style="font-size:12px;color:var(--text2)">🔒 Encrypted (MOLT: prefix)</span>
+            </div>
+            <div class="info-box" id="entry-enc-note">Entry will be encrypted with your wallet-derived key and prefixed with MOLT:</div>
+            <button class="btn-primary" id="btn-publish-entry">Publish Entry</button>
+            <div id="entry-result" style="margin-top:12px;font-size:12px;"></div>
+          </div>
+        </div>
+
+        <!-- Publish File -->
+        <div id="tab-file" class="tab-content">
+          <div class="card">
+            <h2>Publish File to Chain</h2>
+            <div class="info-box">Large files are automatically split into multi-part chunks. Each chunk is one Solana transaction (~0.000005 SOL each).</div>
+            <div class="field-row">
+              <div class="field">
+                <label>File Path</label>
+                <input type="text" id="file-path" placeholder="Select a file..." readonly />
+              </div>
+              <button class="btn" onclick="browseFile()" style="white-space:nowrap;padding:8px 14px;">Browse</button>
+            </div>
+            <div class="field">
+              <label>Label (shown in dashboard)</label>
+              <input type="text" id="file-label" placeholder="e.g. IDENTITY.md" />
+            </div>
+            <div id="file-cost-est" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
+            <button class="btn-primary" id="btn-publish-file">Publish File</button>
+            <div id="file-progress-wrap" style="display:none;margin-top:12px;">
+              <div style="font-size:12px;color:var(--text2);margin-bottom:4px;" id="file-progress-label">Uploading...</div>
+              <div class="progress-wrap"><div class="progress-bar" id="file-progress-bar"></div></div>
+            </div>
+            <div id="file-result" style="margin-top:12px;font-size:12px;"></div>
+          </div>
+        </div>
+
+        <!-- Backup .env -->
+        <div id="tab-env" class="tab-content">
+          <div class="card">
+            <h2>Backup .env to Chain</h2>
+            <div class="warn-box">⚠️ The encrypted blob will be written as a <strong>public</strong> transaction memo. It is safe only because without your passphrase, it cannot be decrypted.</div>
+            <div class="info-box">Your <strong>passphrase</strong> encrypts your API keys. Your <strong>wallet key</strong> encrypts your identity. Both are needed for full recovery. Never lose either one.</div>
+            <div class="field-row">
+              <div class="field">
+                <label>.env File Path</label>
+                <input type="text" id="env-path" placeholder="Select .env file..." readonly />
+              </div>
+              <button class="btn" onclick="browseEnv()" style="white-space:nowrap;padding:8px 14px;">Browse</button>
+            </div>
+            <div class="field">
+              <label>Recovery Passphrase</label>
+              <input type="password" id="env-passphrase" placeholder="A strong, memorable passphrase..." />
+            </div>
+            <div class="field">
+              <label>Confirm Passphrase</label>
+              <input type="password" id="env-passphrase2" placeholder="Confirm passphrase..." />
+            </div>
+            <button class="btn-primary" id="btn-backup-env">Encrypt & Publish .env</button>
+            <div id="env-result" style="margin-top:12px;font-size:12px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ RECOVER ══════════════════ -->
+      <div id="screen-recover" class="screen">
+        <h1>Recover</h1>
+        <div class="subtitle">Reconstruct your agent identity from the blockchain</div>
+
+        <div class="card">
+          <h2>Step 1 — Identify Wallet</h2>
+          <div class="tabs" style="margin-bottom:14px;">
+            <button class="tab active" data-tab="rec-tab-key">Private Key</button>
+            <button class="tab" data-tab="rec-tab-addr">Address Only</button>
+            <button class="tab" data-tab="rec-tab-env">Recover from .env Blob</button>
+          </div>
+
+          <div id="rec-tab-key" class="tab-content active">
+            <div class="field">
+              <label>Base58 Private Key</label>
+              <input type="password" id="rec-privkey" placeholder="Paste your Solana private key..." />
+            </div>
+            <button class="btn" id="btn-rec-import-key">Load Wallet</button>
+          </div>
+
+          <div id="rec-tab-addr" class="tab-content">
+            <div class="info-box">Public entries and metadata are visible. Encrypted entries cannot be decrypted without the private key.</div>
+            <div class="field">
+              <label>Wallet Address</label>
+              <input type="text" id="rec-address" placeholder="Solana wallet address..." />
+            </div>
+            <button class="btn" id="btn-rec-load-addr">Use Address</button>
+          </div>
+
+          <div id="rec-tab-env" class="tab-content">
+            <div class="info-box">If you backed up your .env to the chain, enter the wallet address and your passphrase to recover the private key, then decrypt everything.</div>
+            <div class="field">
+              <label>Wallet Address</label>
+              <input type="text" id="rec-env-address" placeholder="Solana wallet address..." />
+            </div>
+            <div class="field">
+              <label>Recovery Passphrase</label>
+              <input type="password" id="rec-env-passphrase" placeholder="Your recovery passphrase..." />
+            </div>
+            <button class="btn" id="btn-rec-from-env">Recover from .env Blob</button>
+          </div>
+
+          <div id="rec-wallet-loaded" style="display:none;margin-top:12px;">
+            <span class="badge badge-green">✓ Wallet loaded</span>
+            <span class="addr" id="rec-loaded-address" style="margin-left:10px;"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Step 2 — Scan Chain</h2>
+          <div class="info-box">Fetching all transactions may take 5–10 minutes depending on wallet history. Rate limited to 200ms between fetches.</div>
+          <button class="btn-primary" id="btn-scan-chain">🔍 Scan Chain</button>
+          <div id="rec-scan-progress" style="display:none;margin-top:12px;">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px;" id="rec-scan-label">Scanning...</div>
+            <div class="progress-wrap"><div class="progress-bar" id="rec-progress-bar"></div></div>
+          </div>
+        </div>
+
+        <div id="rec-results" style="display:none">
+          <div class="card">
+            <h2>Recoverable Files</h2>
+            <div id="rec-files-list" class="table-wrap">
+              <div class="empty">No files found.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Ledger Entries</h2>
+            <div id="rec-entries-list" class="table-wrap entry-list">
+              <div class="empty">No entries found.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Recover All to Disk</h2>
+            <div class="field-row">
+              <div class="field">
+                <label>Output Directory</label>
+                <input type="text" id="rec-output-dir" placeholder="Choose output directory..." readonly />
+              </div>
+              <button class="btn" onclick="browseOutputDir()" style="white-space:nowrap;padding:8px 14px;">Browse</button>
+            </div>
+            <button class="btn-primary" id="btn-recover-all">⬇ Recover All Files</button>
+            <div id="rec-result" style="margin-top:12px;font-size:12px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ SETUP ══════════════════ -->
+      <div id="screen-setup" class="screen">
+        <h1>Setup</h1>
+        <div class="subtitle">Configure wallet, workspace, and recovery settings</div>
+
+        <!-- Wallet setup -->
+        <div class="card">
+          <h2>Wallet</h2>
+          <div class="tabs" style="margin-bottom:14px;">
+            <button class="tab active" data-tab="setup-tab-env">Load from .env</button>
+            <button class="tab" data-tab="setup-tab-import">Import Key</button>
+            <button class="tab" data-tab="setup-tab-generate">Generate New</button>
+          </div>
+
+          <div id="setup-tab-env" class="tab-content active">
+            <div class="info-box">Load SOLANA_PRIVATE_KEY from your workspace .env file. The key is never stored in app settings — only in memory for this session.</div>
+            <div class="field-row">
+              <div class="field">
+                <label>.env File Path</label>
+                <input type="text" id="setup-env-path" placeholder="~/.openclaw/workspace/.env" />
+              </div>
+              <button class="btn" onclick="browseSetupEnv()" style="white-space:nowrap;padding:8px 14px;">Browse</button>
+            </div>
+            <button class="btn-primary" id="btn-load-env">Load Wallet</button>
+          </div>
+
+          <div id="setup-tab-import" class="tab-content">
+            <div class="info-box">Paste your base58-encoded Solana private key. It will be held in memory only — not saved to disk.</div>
+            <div class="field">
+              <label>Private Key (base58)</label>
+              <input type="password" id="setup-privkey" placeholder="Paste private key..." />
+            </div>
+            <button class="btn-primary" id="btn-import-key">Import Wallet</button>
+          </div>
+
+          <div id="setup-tab-generate" class="tab-content">
+            <div class="warn-box">⚠️ A new wallet has zero SOL. You must fund it before publishing anything. Save the private key immediately — it will not be shown again.</div>
+            <button class="btn-primary" id="btn-generate-wallet">Generate New Wallet</button>
+            <div id="generated-wallet" style="display:none;margin-top:14px;">
+              <div class="field">
+                <label>Address</label>
+                <div class="addr-row">
+                  <span class="addr full" id="gen-address"></span>
+                  <button class="btn-icon" onclick="copyText('gen-address')" title="Copy">⎘</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Private Key — <strong style="color:var(--red)">Save this now. It will not be shown again.</strong></label>
+                <div class="addr-row">
+                  <span class="addr full" id="gen-privkey" style="word-break:break-all;"></span>
+                  <button class="btn-icon" onclick="copyText('gen-privkey')" title="Copy">⎘</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="setup-wallet-status" style="margin-top:12px;display:none;">
+            <span class="badge badge-green">✓ Wallet loaded</span>
+            <span class="addr" id="setup-loaded-address" style="margin-left:10px;font-size:11px;"></span>
+          </div>
+        </div>
+
+        <!-- Recovery Passphrase info -->
+        <div class="card">
+          <h2>Recovery Passphrase</h2>
+          <div class="info-box">
+            The recovery passphrase is used <strong>only</strong> for .env backup/restore.<br><br>
+            <strong>Your passphrase</strong> encrypts your API keys (Moltbook, Anthropic, etc.)<br>
+            <strong>Your wallet key</strong> encrypts your identity files (SOUL.md, MEMORY.md, etc.)<br><br>
+            Both are needed for full recovery from a blank machine. Never store the passphrase digitally without another layer of encryption.
+          </div>
+          <div style="color:var(--text2);font-size:12px;">The passphrase is never stored in this app. Enter it each time you backup or restore.</div>
+        </div>
+
+        <!-- Workspace -->
+        <div class="card">
+          <h2>Workspace</h2>
+          <div class="field-row">
+            <div class="field">
+              <label>OpenClaw Workspace Directory</label>
+              <input type="text" id="workspace-path" placeholder="~/.openclaw/workspace" />
+            </div>
+            <button class="btn" onclick="browseWorkspace()" style="white-space:nowrap;padding:8px 14px;">Browse</button>
+          </div>
+          <button class="btn" id="btn-save-workspace">Save Settings</button>
+        </div>
+
+        <!-- OpenClaw install -->
+        <div class="card">
+          <h2>OpenClaw</h2>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">OpenClaw is the local agent runtime that ARS is designed to back up and restore.</div>
+          <div class="field">
+            <label>Install command (macOS/Linux)</label>
+            <div class="addr-row">
+              <code style="font-family:var(--mono);font-size:12px;background:var(--bg3);padding:8px 12px;border-radius:var(--radius);flex:1;">npm install -g openclaw</code>
+              <button class="btn-icon" onclick="copyRaw('npm install -g openclaw')">⎘</button>
+            </div>
+          </div>
+          <button class="btn" id="btn-openclaw-docs">Open docs.openclaw.ai ↗</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Status bar -->
+  <div id="statusbar">
+    <span><span id="conn-dot"></span><span id="conn-status">Not connected</span></span>
+    <span class="sep">|</span>
+    <span id="status-op">Ready</span>
+    <span class="sep">|</span>
+    <span>Balance: <span id="sb-balance">—</span></span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

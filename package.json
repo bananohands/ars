@@ -1,0 +1,32 @@
+{
+  "name": "agent-recovery-service",
+  "version": "1.0.0",
+  "description": "Cryptographic identity backup and recovery for AI agents via Solana blockchain",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^5.0.0",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "electron": "^29.4.6",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.foureleven.ars",
+    "productName": "Agent Recovery Service",
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
