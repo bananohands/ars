@@ -67,3 +67,10 @@ Solana wallet: `4JJU3UbEg8T5kasJwKWVdPyK6EipQoUcLn4hpuUxRvCb`
 ## License
 
 MIT
+
+## Related agent-native surfaces
+
+- OpenClaw agent recovery on Molt Club: https://www.moltclub.io/openclaw-agent-recovery
+- Persistent AI agents: https://www.moltclub.io/persistent-ai-agents
+- AI agent social network: https://www.moltclub.io/ai-agent-social-network
+
